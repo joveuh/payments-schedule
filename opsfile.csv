@@ -1,7 +1,7 @@
 operation,frequency,amount,startDate
 in,B, 3000, 2024-10-01 # PAY
-out,M, 1500, 2024-10-01 # Rent
-out,M, 500, 2024-10-15 # Car Insurance
+out,m, 1500, 2024-10-01 # Rent
+OUT,M, 500, 2024-10-15 # Car Insurance
 out,B, 500, 2024-10-15 # Car Payment
 out,M, 300, 2024-10-01 # Insurance
 out,B, 100, 2024-10-05 # Gym
