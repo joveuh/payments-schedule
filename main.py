@@ -51,7 +51,7 @@ def sort_csv_by_date(ops):
     # The last key in the dict will be -365 + 100 = -265 days, so 265 days in the past. And so the calculations for those dates won't happen.
 
     # TO-DO
-    # 
+    #
     # There may be user-interest to actually move the backdated entries to the present dates
 
     # think of the entries along an x-axis,
@@ -141,7 +141,9 @@ def getCSVfromfile(csvfile):
             for row in csv_reader:
                 rows.append(row)
             if len(rows) < 2:
-                raise ValueError("The CSV file seems to have an issue. It only contains single line. It must contain a header line and at least 1 data line.")
+                raise ValueError(
+                    "The CSV file seems to have an issue. It only contains single line. It must contain a header line and at least 1 data line."
+                )
             print("\nCSV file contents:")
             return rows
     except Exception as e:
