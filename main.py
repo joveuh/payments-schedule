@@ -1,10 +1,8 @@
 from datetime import datetime, date, time, timedelta
-import csv, json, os
+import csv, json
 import sys
-import boto3
 from io import StringIO
 
-s3 = boto3.client("s3")
 DATE_FORMATTER = "%Y-%m-%d"
 date_dict = {}
 
@@ -30,6 +28,9 @@ def adjust_date(date: datetime, frequency: str) -> datetime:
 
 
 def performops(ops, calculateuntil):
+    
+    # however many days you are missing from the first date in the CSV file, you want to add the diff between that date and today's date to the calculate until date
+
     for op in ops[1:]:
         type, freq, amount, date = op
         amount = int(amount)
@@ -126,7 +127,7 @@ if __name__ == "__main__":
     args = [arg.lower() for arg in sys.argv[1:]]
     default_days = 100
     if len(args) == 0:
-        run(default_days)
+        run(default_days, None)
         exit
     else:
         opscsvfile = args[0] if len(args) > 0 and args[0] else None
