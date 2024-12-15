@@ -7,8 +7,7 @@ Clone the repo, from terminal issue:
 
 This will print a sample summary with a sample csv.
 To print your own summary, you can provide a comma separated CSV file with the following format:
-
-<br><code>operation,frequency,amount,startDate</code><br>
+<br><code>operation,frequency,amount,startDate</code><p>
 where operation can be <code>in</code> or <code>out</code> as in money being deposited or withdrawn. 
 <br>Frequency can be any of the following<code> Y, BY, Q, M, B, W, D </code><br>
 as in <code>Yearly, Bi-Yearly, Quarterly, Monthly, Bi-Weekly Weekly, Daily</code>.<br>
