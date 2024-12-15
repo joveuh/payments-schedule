@@ -3,6 +3,19 @@ import csv, json
 import sys
 from io import StringIO
 
+
+ops_content_text = """
+operation,frequency,amount,date
+in,B, 3000, 2024-10-01 # PAY
+out,M, 1500, 2024-10-01 # Rent
+out,M, 500, 2024-10-15 # Car Insurance
+out,B, 500, 2024-10-15 # Car Payment
+out,M, 300, 2024-10-01 # Insurance
+out,B, 100, 2024-10-05 # Gym
+out,BY, 50, 2024-10-01 # Microsoft
+out,W, 50, 2024-10-01 # Gas"""
+
+
 DATE_FORMATTER = "%Y-%m-%d"
 date_dict = {}
 
@@ -31,9 +44,9 @@ def sort_csv_by_date(ops):
     # 1) the CSV could potentially be a file with dates that are not from present times
     # The user supplied or default 'calculateuntil' variable assumes entries contain recent dates, particularly today's date and following dates.
     # Depending on the user-supplied value of #days to calculate payment schedule for, this logic may cause issues.
-    
-    # Suppose the default value of 100 days is used in case user does not supply calculateuntil integer number. So we begin to 
-    # calculate the next 100 days of payment schedule. However, if the latest date in the CSV is from 365 year ago, this will surely fail 
+
+    # Suppose the default value of 100 days is used in case user does not supply calculateuntil integer number. So we begin to
+    # calculate the next 100 days of payment schedule. However, if the latest date in the CSV is from 365 year ago, this will surely fail
     # because the datetime keys in date_dict being generated will not make it as far as today's date considering the logic  until = date + timedelta(calculateuntil)
     # The last key in the dict will be -365 + 100 = -265 days, so 265 days in the past. And so the calculations for those dates won't happen.
 
@@ -49,16 +62,18 @@ def sort_csv_by_date(ops):
     )
     return ops
 
+
 def get_detla_from_earliest_csv_date(ops):
     ops = sort_csv_by_date(ops)
 
-    earliest_date_in_csv = ops[0][3].split('#')[0].strip()
-    latest_date_in_csv = next(reversed(ops))[3].split('#')[0].strip()
+    earliest_date_in_csv = ops[0][3].split("#")[0].strip()
+    latest_date_in_csv = next(reversed(ops))[3].split("#")[0].strip()
     # print(f"earliest date is {earliest_date_in_csv} and the latest date in the csv is {latest_date_in_csv}")
-        
-    delta = (datetime.today() - datetime.strptime(earliest_date_in_csv, DATE_FORMATTER)).days
-    return delta
 
+    delta = (
+        datetime.today() - datetime.strptime(earliest_date_in_csv, DATE_FORMATTER)
+    ).days
+    return delta
 
 
 def performops(ops, calculateuntil):
@@ -121,14 +136,12 @@ def getCSVfromfile(csvfile):
         with open(csvfile, mode="r") as file:
             csv_reader = csv.reader(file)
             rows = []
-            # Check if the file is empty
-            first_row = next(csv_reader, None)
-            if first_row is None:
-                raise ValueError("The CSV file is empty.")
             for row in csv_reader:
                 rows.append(row)
+            if len(rows) < 2:
+                raise ValueError("The CSV file seems to have an issue. It only contains single line. It must contain a header line and at least 1 data line.")
+            print("\nCSV file contents:")
             return rows
-
     except Exception as e:
         raise Exception(f"Error reading csv file: {str(e)}")
 
@@ -151,18 +164,6 @@ def run(calculateuntil: int, opscsvfile: str = None):
     print("\n".join(map(str, ops_content)))
     print("\nSummary of payments schedule")
     return respond(None, startcalculations(ops_content, int(calculateuntil)))
-
-
-ops_content_text = """
-operation,frequency,amount,date
-in,B, 3000, 2024-10-01 # PAY
-out,M, 1500, 2024-10-01 # Rent
-out,M, 500, 2024-10-15 # Car Insurance
-out,B, 500, 2024-10-15 # Car Payment
-out,M, 300, 2024-10-01 # Insurance
-out,B, 100, 2024-10-05 # Gym
-out,BY, 50, 2024-10-01 # Microsoft
-out,W, 50, 2024-10-01 # Gas"""
 
 
 if __name__ == "__main__":
