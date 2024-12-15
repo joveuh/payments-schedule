@@ -27,11 +27,13 @@ def fill_in_dict(startdate, enddate):
 
 
 def adjust_date(date: datetime, frequency: str) -> datetime:
+    _DAYS_IN_MONTH = [-1, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    days_in_curr_month = _DAYS_IN_MONTH[date.month]
     return {
         "Y": date + timedelta(365),  # Yearly
         "BY": date + timedelta(365 / 2),  # Bi-Yearly
         "Q": date + timedelta(days=90),  # Quarterly
-        "M": date + timedelta(30),  # Monthly
+        "M": date + timedelta(days_in_curr_month),  # Monthly
         "B": date + timedelta(weeks=2),  # Bi-Weekly
         "W": date + timedelta(weeks=1),  # Weekly
         "D": date + timedelta(days=1),  # Daily
@@ -108,10 +110,10 @@ def printsummary():
             payment_denominations = f"Payments: {payment_denominations_list}"
             total = f"In/Out Total: {sum_of_ops}"
             line = (
-                f"{date:<20} {payment_denominations:<40} {total:<60} {balance_str:<80}"
+                f"{date:<20} {payment_denominations:<40} {total:<30} {balance_str:<30}"
             )
         else:
-            line = f"{date:<20} {'':<40} {'':<60} {balance_str:<80}"
+            line = f"{date:<20} {'':<40} {'':<30} {balance_str:<30}"
         print(line)
 
 
