@@ -72,7 +72,6 @@ def get_detla_from_earliest_csv_date(ops):
 
     earliest_date_in_csv = ops[0][3].split("#")[0].strip()
     latest_date_in_csv = next(reversed(ops))[3].split("#")[0].strip()
-    # print(f"earliest date is {earliest_date_in_csv} and the latest date in the csv is {latest_date_in_csv}")
 
     delta = (
         datetime.today() - datetime.strptime(earliest_date_in_csv, DATE_FORMATTER)
