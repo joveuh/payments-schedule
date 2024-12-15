@@ -27,10 +27,42 @@ def adjust_date(date: datetime, frequency: str) -> datetime:
     )  # Default case returns the unchanged date
 
 
-def performops(ops, calculateuntil):
+def sort_csv_by_date(ops):
+    # 1) the CSV could potentially be a file with dates that are not from present times
+    # The user supplied or default 'calculateuntil' variable assumes entries contain recent dates, particularly today's date and following dates.
+    # Depending on the user-supplied value of #days to calculate payment schedule for, this logic may cause issues.
     
-    # however many days you are missing from the first date in the CSV file, you want to add the diff between that date and today's date to the calculate until date
+    # Suppose the default value of 100 days is used in case user does not supply calculateuntil integer number. So we begin to 
+    # calculate the next 100 days of payment schedule. However, if the latest date in the CSV is from 365 year ago, this will surely fail 
+    # because the datetime keys in date_dict being generated will not make it as far as today's date considering the logic  until = date + timedelta(calculateuntil)
+    # The last key in the dict will be -365 + 100 = -265 days, so 265 days in the past. And so the calculations for those dates won't happen.
 
+    # There may be user-interest to actually move the backdated entries to the present dates
+
+    # think of the entries along an x-axis,
+    # if the earliest date is more than 6 months away from the latest date, user may want to calculate it as it is
+    # if the earliest date is within 2 months of the latest date, move all dates forward by delta from below
+
+    ops = sorted(
+        ops[1:],
+        key=lambda row: datetime.strptime(row[3].split("#")[0].strip(), DATE_FORMATTER),
+    )
+    return ops
+
+def get_detla_from_earliest_csv_date(ops):
+    ops = sort_csv_by_date(ops)
+
+    earliest_date_in_csv = ops[0][3].split('#')[0].strip()
+    latest_date_in_csv = next(reversed(ops))[3].split('#')[0].strip()
+    # print(f"earliest date is {earliest_date_in_csv} and the latest date in the csv is {latest_date_in_csv}")
+        
+    delta = (datetime.today() - datetime.strptime(earliest_date_in_csv, DATE_FORMATTER)).days
+    return delta
+
+
+
+def performops(ops, calculateuntil):
+    calculateuntil += get_detla_from_earliest_csv_date(ops)
     for op in ops[1:]:
         type, freq, amount, date = op
         amount = int(amount)
@@ -41,30 +73,36 @@ def performops(ops, calculateuntil):
             if date in date_dict:
                 date_dict[date].append(amount if type == "in" else -amount)
             date = adjust_date(date, freq)
-        
+
 
 def printsummary():
     balance = 0
-    for index, (date,payment_denominations_list) in enumerate(date_dict.items()):
-        sum_of_ops = sum(payment_denominations_list) if payment_denominations_list != None and len(payment_denominations_list) > 0 else 0
+    for index, (date, payment_denominations_list) in enumerate(date_dict.items()):
+        sum_of_ops = (
+            sum(payment_denominations_list)
+            if payment_denominations_list != None
+            and len(payment_denominations_list) > 0
+            else 0
+        )
         balance = balance + sum_of_ops
         balance_str = f"Balance: {str(balance)}"
         date = f"Date: {date}"
         if payment_denominations_list != None and len(payment_denominations_list) > 0:
             payment_denominations = f"Payments: {payment_denominations_list}"
             total = f"In/Out Total: {sum_of_ops}"
-            line = f"{date:<20} {payment_denominations:<40} {total:<60} {balance_str:<80}"
+            line = (
+                f"{date:<20} {payment_denominations:<40} {total:<60} {balance_str:<80}"
+            )
         else:
             line = f"{date:<20} {'':<40} {'':<60} {balance_str:<80}"
         print(line)
-            
 
 
 def startcalculations(ops_content, calculateuntil):
     today = date.today()
     enddate = today + timedelta(days=calculateuntil)
     fill_in_dict(today, enddate)
-    performops(ops_content,  calculateuntil)
+    performops(ops_content, calculateuntil)
     return printsummary()
 
 
@@ -83,6 +121,10 @@ def getCSVfromfile(csvfile):
         with open(csvfile, mode="r") as file:
             csv_reader = csv.reader(file)
             rows = []
+            # Check if the file is empty
+            first_row = next(csv_reader, None)
+            if first_row is None:
+                raise ValueError("The CSV file is empty.")
             for row in csv_reader:
                 rows.append(row)
             return rows
@@ -112,7 +154,7 @@ def run(calculateuntil: int, opscsvfile: str = None):
 
 
 ops_content_text = """
-operation,frequency,amount,startDate
+operation,frequency,amount,date
 in,B, 3000, 2024-10-01 # PAY
 out,M, 1500, 2024-10-01 # Rent
 out,M, 500, 2024-10-15 # Car Insurance
