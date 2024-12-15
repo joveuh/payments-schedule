@@ -8,13 +8,10 @@ Clone the repo, from terminal issue:
 This will print a sample summary with a sample csv.
 To print your own summary, you can provide a comma separated CSV file with the following format:
 
-<br><code>
-operation,frequency,amount,startDate
-</code><br>
+<br><code>operation,frequency,amount,startDate</code><br>
 where operation can be <code>in</code> or <code>out</code> as in money being deposited or withdrawn. 
-<br>
-frequency can be any of the following<code> Y, BY, Q, M, B, W, D </code><br>
-as in Yearly, Bi-Yearly, Quarterly, Monthly, Bi-Weekly Weekly, Daily.<br>
+<br>Frequency can be any of the following<code> Y, BY, Q, M, B, W, D </code><br>
+as in <code>Yearly, Bi-Yearly, Quarterly, Monthly, Bi-Weekly Weekly, Daily</code>.<br>
 
 You can invoke the main.py script with the CSV file argument and # of days you want to print the payments schedule for.
 For example:
@@ -30,3 +27,4 @@ Here is a sample screenshot of the csvfile and the payments schedule summary.
 -----------------------------------------------
 -----------------------------------------------
 -----------------------------------------------
+![Screenshot 2024-12-14 at 11 27 48 PM](https://github.com/user-attachments/assets/8a75a258-d744-44e5-9339-db3a112b83ea)
