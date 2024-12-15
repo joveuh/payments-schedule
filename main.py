@@ -88,8 +88,8 @@ def performops(ops, calculateuntil):
 
         while date < until:
             if date in date_dict:
-                date_dict[date].append(amount if type == "in" else -amount)
-            date = adjust_date(date, freq)
+                date_dict[date].append(amount if type.lower() == "in" else -amount)
+            date = adjust_date(date, freq.upper())
 
 
 def printsummary():
