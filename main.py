@@ -1,8 +1,7 @@
 from datetime import datetime, date, timedelta
-import csv, json
-import sys
+import csv, json, sys
 from io import StringIO
-
+from schedule_summary_db_ops import DB_Ops
 
 ops_content_text = """
 operation,frequency,amount,date
@@ -93,7 +92,8 @@ def performops(ops, calculateuntil):
             date = adjust_date(date, freq.upper())
 
 
-def printsummary():
+def save_summary():
+    rows = []
     balance = 0
     for index, (date, payment_denominations_list) in enumerate(date_dict.items()):
         sum_of_ops = (
@@ -104,24 +104,37 @@ def printsummary():
         )
         balance = balance + sum_of_ops
         balance_str = f"Balance: {str(balance)}"
-        date = f"Date: {date}"
+        date_str = f"Date: {date}"
         if payment_denominations_list != None and len(payment_denominations_list) > 0:
             payment_denominations = f"Payments: {payment_denominations_list}"
             total = f"In/Out Total: {sum_of_ops}"
-            line = (
-                f"{date:<20} {payment_denominations:<40} {total:<30} {balance_str:<30}"
-            )
+            line = f"{date_str:<20} {payment_denominations:<40} {total:<30} {balance_str:<30}"
         else:
-            line = f"{date:<20} {'':<40} {'':<30} {balance_str:<30}"
+            line = f"{date_str:<20} {'':<40} {'':<30} {balance_str:<30}"
+        rows.append((datetime.strftime(date, DATE_FORMATTER), sum_of_ops, balance))
         print(line)
+    return rows
 
 
-def startcalculations(ops_content, calculateuntil):
+def store_db_table(rows: list = None, db_handler: DB_Ops = None):
+    if rows is None:
+        raise Exception("sorry, empty list to store in db")
+    if db_handler is None:
+        raise Exception("sorry, no db instance specififed")
+    for tuple_txn in rows:
+        db_handler.cursor_execute(None, tuple_txn)
+
+
+def startcalculationsandstore(ops_content, calculateuntil):
     today = date.today()
     enddate = today + timedelta(days=calculateuntil)
     fill_in_dict(today, enddate)
     performops(ops_content, calculateuntil)
-    return printsummary()
+    db_handler = DB_Ops()
+    db_handler.create_table()
+    store_db_table(save_summary(), db_handler)
+    # db_handler.show_db_table()
+    print(db_handler.cursor_execute("SELECT * FROM summary_table").fetchall())
 
 
 def respond(err, res=None):
@@ -168,7 +181,7 @@ def run(calculateuntil: int, opscsvfile: str = None):
     )
     print("\n".join(map(str, ops_content)))
     print("\nSummary of payments schedule")
-    return respond(None, startcalculations(ops_content, int(calculateuntil)))
+    return respond(None, startcalculationsandstore(ops_content, int(calculateuntil)))
 
 
 if __name__ == "__main__":
