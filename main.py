@@ -133,8 +133,8 @@ def startcalculationsandstore(ops_content, calculateuntil):
     db_handler = DB_Ops()
     db_handler.create_table()
     store_db_table(save_summary(), db_handler)
-    # db_handler.show_db_table()
-    print(db_handler.cursor_execute("SELECT * FROM summary_table").fetchall())
+    # print(db_handler.cursor_execute("PRAGMA table_info(summary_table)").fetchall())
+    # print("\n".join(list(map(str,db_handler.cursor_execute("SELECT * FROM summary_table").fetchall()))))
 
 
 def respond(err, res=None):
