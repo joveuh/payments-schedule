@@ -41,7 +41,7 @@ class DB_Ops:
                 "Method cannot be called with None data.\n Provide valid INSERT INTO date: date, total, balance"
             )
         date, total, balance = data
-        INSERT_INTO_TABLE_CMD = f"INSERT OR REPLACE INTO {TABLE_NAME} (date, total, balance) VALUES({date}, {total}, {balance})"
+        INSERT_INTO_TABLE_CMD = f"INSERT OR REPLACE INTO {TABLE_NAME} (date, total, balance) VALUES('{date}', {total}, {balance})"
         return INSERT_INTO_TABLE_CMD
 
     def create_table(self):
