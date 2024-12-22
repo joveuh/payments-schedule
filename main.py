@@ -82,7 +82,7 @@ def performops(ops, calculateuntil):
     calculateuntil += get_detla_from_earliest_csv_date(ops)
     for op in ops[1:]:
         type, freq, amount, date = op
-        amount = int(amount)
+        amount = round(float(amount),2)
         date = datetime.strptime(date.split("#")[0].strip(), DATE_FORMATTER).date()
         until = date + timedelta(calculateuntil)
 
@@ -102,7 +102,7 @@ def save_summary():
             and len(payment_denominations_list) > 0
             else 0
         )
-        balance = balance + sum_of_ops
+        balance = round(balance + sum_of_ops,2)
         balance_str = f"Balance: {str(balance)}"
         date_str = f"Date: {date}"
         if payment_denominations_list != None and len(payment_denominations_list) > 0:
@@ -112,7 +112,7 @@ def save_summary():
         else:
             line = f"{date_str:<20} {'':<40} {'':<30} {balance_str:<30}"
         rows.append((datetime.strftime(date, DATE_FORMATTER), sum_of_ops, balance))
-        print(line)
+    # print(rows)
     return rows
 
 
@@ -134,7 +134,7 @@ def startcalculationsandstore(ops_content, calculateuntil):
     db_handler.create_table()
     store_db_table(save_summary(), db_handler)
     # print(db_handler.cursor_execute("PRAGMA table_info(summary_table)").fetchall())
-    # print("\n".join(list(map(str,db_handler.cursor_execute("SELECT * FROM summary_table").fetchall()))))
+    print("\n".join(list(map(str,db_handler.cursor_execute("SELECT * FROM summary_table").fetchall()))))
 
 
 def respond(err, res=None):
