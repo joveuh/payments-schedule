@@ -94,6 +94,7 @@ def performops(ops, calculateuntil):
 
 def save_summary():
     rows = []
+    rows_to_print = list()
     balance = 0
     for index, (date, payment_denominations_list) in enumerate(date_dict.items()):
         sum_of_ops = (
@@ -109,10 +110,12 @@ def save_summary():
             payment_denominations = f"Payments: {payment_denominations_list}"
             total = f"In/Out Total: {sum_of_ops}"
             line = f"{date_str:<20} {payment_denominations:<40} {total:<30} {balance_str:<30}"
+            rows_to_print.append(line)
         else:
             line = f"{date_str:<20} {'':<40} {'':<30} {balance_str:<30}"
+            rows_to_print.append(line)
         rows.append((datetime.strftime(date, DATE_FORMATTER), sum_of_ops, balance))
-    # print(rows)
+    print('\n'.join(rows_to_print))
     return rows
 
 
