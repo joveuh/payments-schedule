@@ -1,10 +1,10 @@
-operation,frequency,amount,startDate,endDate
-in,O, 960, 2026-05-09,1970-01-01 # Starting Balance
-in,B, 2629, 2026-05-22,1970-01-01 # PAY
-out,m, 1450, 2026-06-01,1970-01-01 # Rent
-OUT,b, 675, 2026-05-08,1970-01-01 # Proposal
-out,sw, 50, 2026-05-09,1970-01-01 # Groceries ~ $50 twice a week
-out,M, 250, 2026-06-01,1970-01-01 # Uber / Car
-out,m, 28, 2026-06-01,1970-01-01 # Google Pro
-out,m, 40, 2026-06-01,1970-01-01 # Essentials
-out,m, 23, 2026-06-01,1970-01-01 # Spotify
+operation,frequency,amount,startDate
+in,B, 3000, 2024-10-01 # PAY
+out,m, 1500, 2024-10-01 # Rent
+OUT,M, 500, 2024-10-15 # Car Insurance
+out,B, 500, 2024-10-15 # Car Payment
+out,M, 300, 2024-10-01 # Insurance
+out,B, 100, 2024-10-05 # Gym
+out,BY, 50, 2024-10-01 # Microsoft
+out,W, 50, 2024-10-01 # Gas
+out,D, 5, 2024-10-01 # Daily Coffee
