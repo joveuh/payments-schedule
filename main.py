@@ -25,9 +25,19 @@ def fill_in_dict(startdate, enddate):
         startdate = startdate + timedelta(days=1)
 
 
-def adjust_date(date: datetime, frequency: str) -> datetime:
+def adjust_date(date: datetime, frequency: str, calculateuntil: int) -> datetime:
     _DAYS_IN_MONTH = [-1, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
     days_in_curr_month = _DAYS_IN_MONTH[date.month]
+
+    def get_Semiweekly(date: datetime):
+        if date.weekday() == 0:                 # Monday
+            return date + timedelta(days=3)
+        elif date.weekday() == 3:               # Thursday
+            return date + timedelta(days=4)
+        else:
+            #otherwise go to next Monday or Thursday
+            return date + timedelta(days = (7-date.weekday()) % 7)
+
     return {
         "Y": date + timedelta(365),  # Yearly
         "BY": date + timedelta(365 / 2),  # Bi-Yearly
@@ -35,7 +45,9 @@ def adjust_date(date: datetime, frequency: str) -> datetime:
         "M": date + timedelta(days_in_curr_month),  # Monthly
         "B": date + timedelta(weeks=2),  # Bi-Weekly
         "W": date + timedelta(weeks=1),  # Weekly
+        "SW": get_Semiweekly(date), # Twice a week
         "D": date + timedelta(days=1),  # Daily
+        "O": date + timedelta(days = calculateuntil)
     }.get(
         frequency, date
     )  # Default case returns the unchanged date
@@ -81,15 +93,18 @@ def get_detla_from_earliest_csv_date(ops):
 def performops(ops, calculateuntil):
     calculateuntil += get_detla_from_earliest_csv_date(ops)
     for op in ops[1:]:
-        type, freq, amount, date = op
+        type, freq, amount, startdate, enddate = op
         amount = round(float(amount),2)
-        date = datetime.strptime(date.split("#")[0].strip(), DATE_FORMATTER).date()
-        until = date + timedelta(calculateuntil)
+        startdate = datetime.strptime(startdate.strip(), DATE_FORMATTER).date()
+        enddate = datetime.strptime(enddate.split("#")[0].strip(), DATE_FORMATTER).date()
+        until = startdate + timedelta(calculateuntil)
+        
+        # print(f"Processing operation: {type}, frequency: {freq}, amount: {amount}, startdate: {startdate}, enddate: {enddate}, until: {until}", f"oh and btw calculateuntil is: {calculateuntil}")
 
-        while date < until:
-            if date in date_dict:
-                date_dict[date].append(amount if type.lower() == "in" else -amount)
-            date = adjust_date(date, freq.upper())
+        while startdate < until:
+            if startdate in date_dict:
+                date_dict[startdate].append(amount if type.lower() == "in" else -amount)
+            startdate = adjust_date(startdate, freq.upper(), calculateuntil)
 
 
 def save_summary():
