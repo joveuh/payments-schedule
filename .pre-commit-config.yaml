@@ -1,0 +1,71 @@
+# OSPS Baseline pre-commit configuration
+# Complies with: OSPS-BR-07.01 (secrets), OSPS-QA-05.01/05.02 (binaries/artifacts)
+
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks # real secret scanner: regex + entropy; detect-private-key alone misses sk_…/re_… keys
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: [--unsafe] # SAM templates use !Ref/!Sub/!GetAtt tags
+      - id: check-json
+      - id: check-toml
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      - id: detect-private-key
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.9.0
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+        types_or: [python]
+      - id: ruff-format
+        types_or: [python]
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.14.0
+    hooks:
+      - id: mypy
+        args: [--ignore-missing-imports]
+        types_or: [python]
+        require_serial: true
+
+  # eslint hook omitted deliberately — no eslint config ships in this repo
+  # (engine spec: "eslint/prettier where a shared config exists").
+
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v4.0.0-alpha.8
+    hooks:
+      - id: prettier
+        types_or: [javascript, jsx, ts, tsx, json, css, markdown, yaml]
+
+  - repo: local
+    hooks:
+      - id: lambda-env-reminder
+        name: Lambda env-var checklist
+        language: system
+        entry: /bin/bash
+        args:
+          - -c
+          - |
+            test ! -f template.yaml && exit 0
+            printf '\n⚠️  Lambda project detected — verify before git push:\n'
+            printf '   □ STRIPE_WEBHOOK_SECRET   ← blank = order confirmation emails will NOT fire\n'
+            printf '   □ STRIPE_SECRET_KEY\n'
+            printf '   □ RESEND_API_KEY\n'
+            printf '   □ AUTH_SECRET\n'
+            printf '   □ Stripe webhook registered in Stripe Dashboard (live mode)\n'
+            printf '   Run: npm run deploy  to push env vars to AWS Lambda\n\n'
+        always_run: true
+        pass_filenames: false
