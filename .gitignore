@@ -1,6 +1,25 @@
 __pycache__
+.mypy_cache
+.ruff_cache
+.venv
 payment_schedule.db
-tempCodeRunnerFile.py
-tempCodeRunnerFile.python
 myopsfile.csv
-tempCodeRunnerFile.py
+**/tempCodeRunnerFile.py
+
+.DS_Store
+node_modules
+dist
+
+# Local/AI-context files
+.claude/
+ARCHITECTURE.md
+BLOG.md
+DEPLOY.md
+HANDOFF.md
+
+# Media guardrail: raw video never belongs in git history. Served assets under
+# public/ are the exception.
+*.mp4
+*.mov
+*.webm
+!public/**

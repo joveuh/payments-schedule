@@ -1,214 +1,289 @@
-from datetime import datetime, date, timedelta
-import csv, json, sys
+"""Project recurring income/expenses forward and show the running daily balance.
+
+CSV format: operation,frequency,amount,startDate,endDate
+The endDate cell may carry a description after a '#'. An empty endDate (or one
+before startDate) means the payment recurs indefinitely.
+"""
+
+from __future__ import annotations
+
+import argparse
+import calendar
+import csv
+import math
+import sys
+from collections import defaultdict
+from datetime import date, datetime, timedelta
 from io import StringIO
-from schedule_summary_db_ops import DB_Ops
+from typing import Iterator, NamedTuple
 
-ops_content_text = """
-operation,frequency,amount,date
-in,B, 3000, 2024-10-01 # PAY
-out,M, 1500, 2024-10-01 # Rent
-out,M, 500, 2024-10-15 # Car Insurance
-out,B, 500, 2024-10-15 # Car Payment
-out,M, 300, 2024-10-01 # Insurance
-out,B, 100, 2024-10-05 # Gym
-out,BY, 50, 2024-10-01 # Microsoft
-out,W, 50, 2024-10-01 # Gas"""
+DATE_FORMAT = "%Y-%m-%d"
 
+# Bounds the schedule size: an unbounded `days` from the API would build a list
+# big enough to exhaust memory.
+MAX_DAYS = 3650
 
-DATE_FORMATTER = "%Y-%m-%d"
-date_dict = {}
+FREQUENCIES = {
+    "Y": "Yearly",
+    "BY": "Bi-Yearly",
+    "Q": "Quarterly",
+    "M": "Monthly",
+    "B": "Bi-Weekly",
+    "SW": "Semi-Weekly",
+    "W": "Weekly",
+    "D": "Daily",
+    "O": "One-time",
+}
 
+# Month-based frequencies step whole calendar months; the rest are fixed offsets.
+_MONTH_STEP = {"M": 1, "Q": 3, "BY": 6, "Y": 12}
+_FIXED_STEP = {"D": timedelta(days=1), "W": timedelta(weeks=1), "B": timedelta(weeks=2)}
 
-def fill_in_dict(startdate, enddate):
-    while startdate != enddate:
-        date_dict[startdate] = []
-        startdate = startdate + timedelta(days=1)
-
-
-def adjust_date(date: datetime, frequency: str, calculateuntil: int) -> datetime:
-    _DAYS_IN_MONTH = [-1, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-    days_in_curr_month = _DAYS_IN_MONTH[date.month]
-
-    def get_Semiweekly(date: datetime):
-        if date.weekday() == 0:                 # Monday
-            return date + timedelta(days=3)
-        elif date.weekday() == 3:               # Thursday
-            return date + timedelta(days=4)
-        else:
-            #otherwise go to next Monday or Thursday
-            return date + timedelta(days = (7-date.weekday()) % 7)
-
-    return {
-        "Y": date + timedelta(365),  # Yearly
-        "BY": date + timedelta(365 / 2),  # Bi-Yearly
-        "Q": date + timedelta(days=90),  # Quarterly
-        "M": date + timedelta(days_in_curr_month),  # Monthly
-        "B": date + timedelta(weeks=2),  # Bi-Weekly
-        "W": date + timedelta(weeks=1),  # Weekly
-        "SW": get_Semiweekly(date), # Twice a week
-        "D": date + timedelta(days=1),  # Daily
-        "O": date + timedelta(days = calculateuntil)
-    }.get(
-        frequency, date
-    )  # Default case returns the unchanged date
+SAMPLE_CSV = """operation,frequency,amount,startDate,endDate
+in,B, 3000, 2024-10-01, # PAY
+out,M, 1500, 2024-10-01, # Rent
+out,M, 500, 2024-10-15, # Car Insurance
+out,B, 500, 2024-10-15, 2025-10-15 # Car Payment
+out,M, 300, 2024-10-01, # Insurance
+out,B, 100, 2024-10-05, # Gym
+out,BY, 50, 2024-10-01, # Microsoft
+out,W, 50, 2024-10-01, # Gas"""
 
 
-def sort_csv_by_date(ops):
-    # 1) the CSV could potentially be a file with dates that are not from present times
-    # The user supplied or default 'calculateuntil' variable assumes entries contain recent dates, particularly today's date and following dates.
-    # Depending on the user-supplied value of #days to calculate payment schedule for, this logic may cause issues.
-
-    # Suppose the default value of 100 days is used in case user does not supply calculateuntil integer number. So we begin to
-    # calculate the next 100 days of payment schedule. However, if the latest date in the CSV is from 365 year ago, this will surely fail
-    # because the datetime keys in date_dict being generated will not make it as far as today's date considering the logic  until = date + timedelta(calculateuntil)
-    # The last key in the dict will be -365 + 100 = -265 days, so 265 days in the past. And so the calculations for those dates won't happen.
-
-    # TO-DO
-    #
-    # There may be user-interest to actually move the backdated entries to the present dates
-
-    # think of the entries along an x-axis,
-    # if the earliest date is more than 6 months away from the latest date, user may want to calculate it as it is
-    # if the earliest date is within 2 months of the latest date, move all dates forward by delta from below
-
-    ops = sorted(
-        ops[1:],
-        key=lambda row: datetime.strptime(row[3].split("#")[0].strip(), DATE_FORMATTER),
-    )
-    return ops
+class Txn(NamedTuple):
+    operation: str  # "in" or "out"
+    frequency: str
+    amount: float
+    start: date
+    end: date | None  # None means it never stops
+    description: str
 
 
-def get_detla_from_earliest_csv_date(ops):
-    ops = sort_csv_by_date(ops)
-
-    earliest_date_in_csv = ops[0][3].split("#")[0].strip()
-    latest_date_in_csv = next(reversed(ops))[3].split("#")[0].strip()
-
-    delta = (
-        datetime.today() - datetime.strptime(earliest_date_in_csv, DATE_FORMATTER)
-    ).days
-    return delta
+class Day(NamedTuple):
+    date: date
+    items: list[tuple[str, float]]  # (description, signed amount)
+    total: float
+    balance: float
 
 
-def performops(ops, calculateuntil):
-    calculateuntil += get_detla_from_earliest_csv_date(ops)
-    for op in ops[1:]:
-        type, freq, amount, startdate, enddate = op
-        amount = round(float(amount),2)
-        startdate = datetime.strptime(startdate.strip(), DATE_FORMATTER).date()
-        enddate = datetime.strptime(enddate.split("#")[0].strip(), DATE_FORMATTER).date()
-        until = startdate + timedelta(calculateuntil)
-        
-        # print(f"Processing operation: {type}, frequency: {freq}, amount: {amount}, startdate: {startdate}, enddate: {enddate}, until: {until}", f"oh and btw calculateuntil is: {calculateuntil}")
+def add_months(anchor: date, months: int) -> date:
+    """Anchor plus N calendar months, clamped to the target month's last day.
 
-        while startdate < until:
-            if startdate in date_dict:
-                date_dict[startdate].append(amount if type.lower() == "in" else -amount)
-            startdate = adjust_date(startdate, freq.upper(), calculateuntil)
+    Always measured from the anchor, never from the previous occurrence, so a
+    payment on the 31st survives February: Jan 31 -> Feb 28 -> Mar 31.
+    """
+    total = anchor.month - 1 + months
+    year, month = anchor.year + total // 12, total % 12 + 1
+    day = min(anchor.day, calendar.monthrange(year, month)[1])
+    return anchor.replace(year=year, month=month, day=day)
 
 
-def save_summary():
-    rows = []
-    rows_to_print = list()
-    balance = 0
-    for index, (date, payment_denominations_list) in enumerate(date_dict.items()):
-        sum_of_ops = (
-            sum(payment_denominations_list)
-            if payment_denominations_list != None
-            and len(payment_denominations_list) > 0
-            else 0
+def next_semiweekly(d: date) -> date:
+    """Next Monday or Thursday after d."""
+    if d.weekday() == 0:  # Monday -> Thursday
+        return d + timedelta(days=3)
+    if d.weekday() == 3:  # Thursday -> Monday
+        return d + timedelta(days=4)
+    return d + timedelta(days=(7 - d.weekday()) % 7)  # otherwise snap to Monday
+
+
+def occurrences(txn: Txn, until: date) -> Iterator[date]:
+    """Every date txn falls on, from its start up to (but excluding) until."""
+    stop = until
+    if txn.end is not None and txn.end < until:
+        stop = txn.end + timedelta(days=1)  # endDate is inclusive
+
+    if txn.frequency == "O":
+        if txn.start < stop:
+            yield txn.start
+        return
+
+    if txn.frequency in _MONTH_STEP:
+        months = _MONTH_STEP[txn.frequency]
+        n = 0
+        while (d := add_months(txn.start, n * months)) < stop:
+            yield d
+            n += 1
+        return
+
+    delta = _FIXED_STEP.get(txn.frequency)  # None for SW, which steps Mon/Thu
+    d = txn.start
+    while d < stop:
+        yield d
+        d = d + delta if delta else next_semiweekly(d)
+
+
+def make_txn(operation, frequency, amount, start, end, description="") -> Txn:
+    """Validate and build a Txn from raw strings. Shared by the CSV and JSON paths."""
+    operation = str(operation).strip().lower()
+    if operation not in ("in", "out"):
+        raise ValueError(f"operation must be 'in' or 'out', got {operation!r}")
+
+    frequency = str(frequency).strip().upper()
+    if frequency not in FREQUENCIES:
+        raise ValueError(
+            f"unknown frequency {frequency!r}, expected one of {', '.join(FREQUENCIES)}"
         )
-        balance = round(balance + sum_of_ops,2)
-        balance_str = f"Balance: {str(balance)}"
-        date_str = f"Date: {date}"
-        if payment_denominations_list != None and len(payment_denominations_list) > 0:
-            payment_denominations = f"Payments: {payment_denominations_list}"
-            total = f"In/Out Total: {sum_of_ops}"
-            line = f"{date_str:<20} {payment_denominations:<40} {total:<30} {balance_str:<30}"
-            rows_to_print.append(line)
-        else:
-            line = f"{date_str:<20} {'':<40} {'':<30} {balance_str:<30}"
-            rows_to_print.append(line)
-        rows.append((datetime.strftime(date, DATE_FORMATTER), sum_of_ops, balance))
-    print('\n'.join(rows_to_print))
-    return rows
 
-
-def store_db_table(rows: list = None, db_handler: DB_Ops = None):
-    if rows is None:
-        raise Exception("sorry, empty list to store in db")
-    if db_handler is None:
-        raise Exception("sorry, no db instance specififed")
-    for tuple_txn in rows:
-        db_handler.cursor_execute(None, tuple_txn)
-
-
-def startcalculationsandstore(ops_content, calculateuntil):
-    today = date.today()
-    enddate = today + timedelta(days=calculateuntil)
-    fill_in_dict(today, enddate)
-    performops(ops_content, calculateuntil)
-    db_handler = DB_Ops()
-    db_handler.create_table()
-    store_db_table(save_summary(), db_handler)
-    # print(db_handler.cursor_execute("PRAGMA table_info(summary_table)").fetchall())
-    print("\n".join(list(map(str,db_handler.cursor_execute("SELECT * FROM summary_table").fetchall()))))
-
-
-def respond(err, res=None):
-    return {
-        "statusCode": "400" if err else "200",
-        "body": err.message if err else json.dumps(res),
-        "headers": {
-            "Content-Type": "application/json",
-        },
-    }
-
-
-def getCSVfromfile(csvfile):
     try:
-        with open(csvfile, mode="r") as file:
-            csv_reader = csv.reader(file)
-            rows = []
-            for row in csv_reader:
-                rows.append(row)
-            if len(rows) < 2:
-                raise ValueError(
-                    "The CSV file seems to have an issue. It only contains single line. It must contain a header line and at least 1 data line."
-                )
-            print("\nCSV file contents:")
-            return rows
-    except Exception as e:
-        raise Exception(f"Error reading csv file: {str(e)}")
+        amount = round(float(amount), 2)
+    except (TypeError, ValueError):
+        raise ValueError(f"amount must be a number, got {amount!r}") from None
+    if not math.isfinite(amount) or amount < 0:
+        raise ValueError(f"amount must be a positive number, got {amount!r}")
 
+    start_date = _parse_date(start, "startDate")
+    end_date = _parse_date(end, "endDate") if str(end).strip() else None
+    # An end before the start can't mean anything sensible, so treat it as "no end".
+    # This is also what tolerates the 1970-01-01 "never ends" sentinel.
+    if end_date is not None and end_date < start_date:
+        end_date = None
 
-def getCSVfromtext(ops_text=None):
-    reader = csv.reader(StringIO(ops_text))
-    rows = []
-    for row in reader:
-        rows.append(row)
-    print("\nSample CSV file contents:")
-    return rows[1:]
-
-
-def run(calculateuntil: int, opscsvfile: str = None):
-    ops_content = (
-        getCSVfromtext(ops_content_text)
-        if opscsvfile == None
-        else getCSVfromfile(opscsvfile)
+    return Txn(
+        operation, frequency, amount, start_date, end_date, str(description).strip()
     )
-    print("\n".join(map(str, ops_content)))
+
+
+def _parse_date(value, field: str) -> date:
+    try:
+        return datetime.strptime(str(value).strip(), DATE_FORMAT).date()
+    except ValueError:
+        raise ValueError(f"{field} must look like YYYY-MM-DD, got {value!r}") from None
+
+
+def parse_row(row: list[str]) -> Txn:
+    """One CSV row -> Txn. The endDate cell may carry '# description'."""
+    if len(row) != 5:
+        raise ValueError(
+            "expected 5 columns (operation,frequency,amount,startDate,endDate), "
+            f"got {len(row)}: {','.join(row)}"
+        )
+    operation, frequency, amount, start, end = (cell.strip() for cell in row)
+    end, _, description = end.partition("#")
+    return make_txn(operation, frequency, amount, start, end, description)
+
+
+def parse_csv(rows: list[list[str]]) -> list[Txn]:
+    txns = []
+    for line_no, row in enumerate(rows, 1):
+        if not row or not row[0].strip():
+            continue  # blank line
+        if row[0].strip().lower() == "operation":
+            continue  # header
+        try:
+            txns.append(parse_row(row))
+        except ValueError as e:
+            raise ValueError(f"line {line_no}: {e}") from None
+    if not txns:
+        raise ValueError(
+            "no transactions found: need a header line and at least one data line"
+        )
+    return txns
+
+
+def parse_opening(value) -> float:
+    """The balance the account starts at. Unlike an amount, this may be negative."""
+    try:
+        opening = round(float(value), 2)
+    except (TypeError, ValueError):
+        raise ValueError(f"opening balance must be a number, got {value!r}") from None
+    if not math.isfinite(opening):
+        raise ValueError(f"opening balance must be a real number, got {value!r}")
+    return opening
+
+
+def build_schedule(
+    txns: list[Txn], days: int, today: date | None = None, opening: float = 0.0
+) -> list[Day]:
+    """Daily totals and running balance for the next `days` days."""
+    if not 1 <= days <= MAX_DAYS:
+        raise ValueError(f"days must be between 1 and {MAX_DAYS}, got {days}")
+
+    today = today or date.today()
+    until = today + timedelta(days=days)
+
+    by_date: dict[date, list[tuple[str, float]]] = defaultdict(list)
+    for txn in txns:
+        signed = txn.amount if txn.operation == "in" else -txn.amount
+        for d in occurrences(txn, until):
+            if d >= today:  # occurrences before today are history, not schedule
+                by_date[d].append((txn.description, signed))
+
+    schedule, balance = [], parse_opening(opening)
+    d = today
+    while d < until:
+        items = by_date.get(d, [])
+        total = round(sum(amount for _, amount in items), 2)
+        balance = round(balance + total, 2)
+        schedule.append(Day(d, items, total, balance))
+        d += timedelta(days=1)
+    return schedule
+
+
+def format_schedule(schedule: list[Day]) -> str:
+    lines = []
+    for day in schedule:
+        date_str = f"Date: {day.date}"
+        if day.items:
+            payments = f"Payments: {[amount for _, amount in day.items]}"
+            total = f"In/Out Total: {day.total}"
+        else:
+            payments = total = ""
+        lines.append(
+            f"{date_str:<20} {payments:<40} {total:<30} Balance: {day.balance}"
+        )
+    return "\n".join(lines)
+
+
+def read_csv(path: str | None) -> list[list[str]]:
+    if path is None:
+        return list(csv.reader(StringIO(SAMPLE_CSV)))
+    try:
+        with open(path, newline="") as f:
+            return list(csv.reader(f))
+    except OSError as e:
+        raise SystemExit(f"Could not read {path}: {e}") from None
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument(
+        "csvfile", nargs="?", help="CSV file (default: built-in sample)"
+    )
+    parser.add_argument(
+        "days", nargs="?", type=int, default=100, help="days to project (default: 100)"
+    )
+    parser.add_argument("--save", action="store_true", help="also store to sqlite")
+    parser.add_argument(
+        "--opening",
+        type=float,
+        default=0.0,
+        help="balance the account starts at (default: 0, may be negative)",
+    )
+    args = parser.parse_args(argv)
+
+    rows = read_csv(args.csvfile)
+    print("\nCSV contents:")
+    print("\n".join(",".join(row) for row in rows))
+
+    try:
+        schedule = build_schedule(parse_csv(rows), args.days, opening=args.opening)
+    except ValueError as e:
+        raise SystemExit(f"Error: {e}") from None
+
     print("\nSummary of payments schedule")
-    return respond(None, startcalculationsandstore(ops_content, int(calculateuntil)))
+    print(format_schedule(schedule))
+
+    if args.save:
+        from schedule_summary_db_ops import DB_Ops
+
+        db = DB_Ops()
+        db.create_table()
+        db.insert_many([(d.date.isoformat(), d.total, d.balance) for d in schedule])
+        db.close()
+        print(f"\nSaved {len(schedule)} rows to the database.")
+    return 0
 
 
 if __name__ == "__main__":
-    args = [arg.lower() for arg in sys.argv[1:]]
-    default_days = 100
-    if len(args) == 0:
-        run(default_days, None)
-        exit
-    else:
-        opscsvfile = args[0] if len(args) > 0 and args[0] else None
-        days = args[1] if len(args) > 1 and args[1] else default_days
-        run(days, opscsvfile)
+    sys.exit(main())

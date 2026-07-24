@@ -1,0 +1,21 @@
+{
+  "name": "payments-schedule",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Project your recurring income and expenses forward and see the running daily balance.",
+  "scripts": {
+    "setup": "python3 -m venv .venv && .venv/bin/pip install -r requirements.txt && npm --prefix frontend install",
+    "dev": "npm --prefix frontend run dev",
+    "build": "npm --prefix frontend run build",
+    "test": "python3 test_main.py"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/joveuh/payments-schedule.git"
+  },
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/joveuh/payments-schedule/issues"
+  },
+  "homepage": "https://github.com/joveuh/payments-schedule#readme"
+}
