@@ -4,6 +4,8 @@ __pycache__
 .venv
 payment_schedule.db
 myopsfile.csv
+payments-live.json
+payments-live.json.bak*
 **/tempCodeRunnerFile.py
 
 .DS_Store
